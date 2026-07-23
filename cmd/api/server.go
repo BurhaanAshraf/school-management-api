@@ -54,6 +54,7 @@ func main() {
 
 	JWTMiddleware := mw.ExcludeMiddlewares(
 		mw.JWTMiddleware,
+		"/",
 		"/execs/login",
 		"/execs/forgotpassword",
 		"/execs/reset/resetpassword",

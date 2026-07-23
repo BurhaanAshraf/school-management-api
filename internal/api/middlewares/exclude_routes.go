@@ -11,7 +11,12 @@ func ExcludeMiddlewares(middleware func(http.Handler) http.Handler, excludedPath
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 			for _, path := range excludedPaths {
-				if strings.HasPrefix(r.URL.Path, path) {
+				// Exact match for root
+				if path == "/" && r.URL.Path == "/" {
+					next.ServeHTTP(w, r)
+					return
+				}
+				if path != "/" && strings.HasPrefix(r.URL.Path, path) {
 					next.ServeHTTP(w, r)
 					return
 				}
