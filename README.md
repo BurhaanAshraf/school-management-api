@@ -394,6 +394,17 @@ Every incoming request passes through the middleware chain before reaching the r
 
 ---
 
+## 🚀 Live Deployment
+
+The API is deployed on **Render** and is publicly accessible.
+
+- **API Landing Page:** https://school-management-api-yxru.onrender.com/
+
+
+> **Note:** The API is hosted on Render's free tier. If the service has been idle, the first request may take a few seconds while the server starts.
+
+---
+
 # Contributing
 
 Contributions are welcome.
