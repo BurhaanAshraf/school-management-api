@@ -19,11 +19,7 @@ func main() {
 	// Load .env for local development.
 	// In production (e.g. Render), environment variables are provided
 	// by the hosting platform, so it's fine if .env doesn't exist.
-	if err := godotenv.Load("cmd/api/.env"); err == nil {
-		fmt.Println("Loaded environment variables from cmd/api/.env")
-	} else {
-		fmt.Println(".env not found, using system environment variables")
-	}
+	_ = godotenv.Load("cmd/api/.env")
 
 	// Database connection
 	db, err := sqlconnect.ConnectDB()
