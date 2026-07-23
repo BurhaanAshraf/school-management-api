@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/tls"
-	"embed"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,60 +15,37 @@ import (
 	"github.com/joho/godotenv"
 )
 
-//go:embed .env
-var envFile embed.FS
-
-func loadEnvFromEmbeddedFile() {
-	content, err := envFile.ReadFile(".env")
-	if err != nil {
-		log.Fatalf("Error reading .env file: %v", err)
-	}
-	tempFile, err := os.CreateTemp("", ".env")
-	if err != nil {
-		log.Fatalf("Error creating temp .env file: %v", err)
-	}
-	defer os.Remove(tempFile.Name())
-
-	_, err = tempFile.Write(content)
-	if err != nil {
-		log.Fatalf("Error writing to temp .env file: %v", err)
-	}
-	err = tempFile.Close()
-	if err != nil {
-		log.Fatalf("Error closing temp file: %v", err)
-	}
-	err = godotenv.Load(tempFile.Name())
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
-}
-
 func main() {
-	// Only in Development, for running source code...
-	// err := godotenv.Load()
-	// if err != nil {
-	// 	return
-	// }
+	// Load .env for local development.
+	// In production (e.g. Render), environment variables are provided
+	// by the hosting platform, so it's fine if .env doesn't exist.
+	if err := godotenv.Load("cmd/api/.env"); err == nil {
+		fmt.Println("Loaded environment variables from cmd/api/.env")
+	} else {
+		fmt.Println(".env not found, using system environment variables")
+	}
 
-	// load env variables from the embedded .env file
-	loadEnvFromEmbeddedFile()
-
+	// Database connection
 	db, err := sqlconnect.ConnectDB()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Database connection failed:", err)
 	}
 	defer db.Close()
 
-	cert := os.Getenv("CERT_FILE")
-	key := os.Getenv("KEY_FILE")
-
-	port := os.Getenv("API_PORT")
-
-	tlsConfig := &tls.Config{
-		MinVersion: tls.VersionTLS10,
+	// Resolve server port.
+	// Render provides PORT automatically.
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = os.Getenv("API_PORT")
+	}
+	if port == "" {
+		port = "8080"
 	}
 
-	_ = mw.NewRateLimiter(5, time.Minute)
+	addr := ":" + port
+
+	// Configure middlewares
+	rl := mw.NewRateLimiter(5, time.Minute)
 
 	HPPOptions := mw.HPPOptions{
 		CheckQuery:                  true,
@@ -77,22 +53,53 @@ func main() {
 		CheckBodyOnlyForContentType: "application/json",
 		Whitelist:                   []string{"page", "limit", "sort", "order", "search", "category", "status", "type", "from", "to", "start_date", "end_date", "min", "max", "min_amount", "max_amount", "token"},
 	}
-	router := router.MainRouter()
-	JWTMiddleware := mw.ExcludeMiddlewares(mw.JWTMiddleware, "/execs/login", "/execs/forgotpassword", "/execs/reset/resetpassword")
-	SecureMux := utils.ApplyMiddlewares(router, mw.Compression, mw.SecurityHeaders, mw.HppMiddleware(HPPOptions), mw.XSSMiddleware, JWTMiddleware, mw.ResponseTimeMiddleware, mw.Cors)
 
-	// Create Custom Server
+	r := router.MainRouter()
+
+	JWTMiddleware := mw.ExcludeMiddlewares(
+		mw.JWTMiddleware,
+		"/execs/login",
+		"/execs/forgotpassword",
+		"/execs/reset/resetpassword",
+	)
+
+	SecureMux := utils.ApplyMiddlewares(
+		r,
+		mw.Compression,
+		mw.SecurityHeaders,
+		mw.HppMiddleware(HPPOptions),
+		mw.XSSMiddleware,
+		JWTMiddleware,
+		mw.ResponseTimeMiddleware,
+		rl.RateLimiterMiddleware,
+		mw.Cors,
+	)
+
+	// Create server
 	server := &http.Server{
-		Addr:      port,
-		Handler:   SecureMux,
-		TLSConfig: tlsConfig,
+		Addr:    addr,
+		Handler: SecureMux,
 	}
-	fmt.Println("Server is running on port", port)
 
-	err = server.ListenAndServeTLS(cert, key)
-	if err != nil {
-		log.Fatal("Cannot start TLS server", err)
+	// Use HTTPS locally if certificate files exist.
+	cert := os.Getenv("CERT_FILE")
+	key := os.Getenv("KEY_FILE")
+
+	if cert != "" && key != "" {
+		if _, err := os.Stat(cert); err == nil {
+			if _, err := os.Stat(key); err == nil {
+
+				server.TLSConfig = &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				}
+
+				fmt.Printf("HTTPS server running on https://localhost%s\n", addr)
+				log.Fatal(server.ListenAndServeTLS(cert, key))
+			}
+		}
 	}
+
+	// Production / Render
+	fmt.Printf("HTTP server running on port %s\n", port)
+	log.Fatal(server.ListenAndServe())
 }
-
-// We use HTTP methods because we want to standardize API architecture.

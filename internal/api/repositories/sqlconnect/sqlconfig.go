@@ -11,19 +11,17 @@ import (
 )
 
 func registerTLS() error {
-	rootCertPool := x509.NewCertPool()
-
-	pem, err := os.ReadFile("./cert/isrgrootx1.pem")
+	rootCertPool, err := x509.SystemCertPool()
 	if err != nil {
 		return err
 	}
-
-	if ok := rootCertPool.AppendCertsFromPEM(pem); !ok {
-		return fmt.Errorf("failed to append CA certificate")
+	if rootCertPool == nil {
+		rootCertPool = x509.NewCertPool()
 	}
 
 	return mysql.RegisterTLSConfig("tidb", &tls.Config{
-		RootCAs: rootCertPool,
+		RootCAs:    rootCertPool,
+		MinVersion: tls.VersionTLS12,
 	})
 }
 
@@ -38,7 +36,6 @@ func ConnectDB() (*sql.DB, error) {
 	dbName := os.Getenv("DB_NAME")
 	host := os.Getenv("DB_HOST")
 	dbPort := os.Getenv("DB_PORT")
-	// connectionString := "root:Burhan@6965@tcp(127.0.0.1:3306)/" + dbName //Connection String
 
 	connectionString := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?tls=tidb&parseTime=true", user, password, host, dbPort, dbName)
 
