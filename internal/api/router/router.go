@@ -1,17 +1,18 @@
 package router
 
-import (
-	"net/http"
-)
+import "net/http"
 
 func MainRouter() *http.ServeMux {
+	root := http.NewServeMux()
 
 	tRouter := TeachersRouter()
 	sRouter := StudentsRouter()
-	eRouter := ExecsRouter()
 
-	sRouter.Handle("/", eRouter)
+	sRouter.Handle("/", ExecsRouter())
 	tRouter.Handle("/", sRouter)
-	return tRouter
 
+	root.Handle("/", tRouter)
+	root.HandleFunc("GET /{$}", HomeHandler)
+
+	return root
 }
